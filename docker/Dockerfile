@@ -1,3 +1,5 @@
+# docker build --network host -t priceopt:latest .
+
 FROM ddookkee/ipopt:3.14
 
 # 设置工作目录和user
@@ -28,3 +30,4 @@ RUN apt-get install -y --no-install-recommends \
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# docker run --network host --name optprice -v $(pwd):/workspace  -it priceopt:latest
