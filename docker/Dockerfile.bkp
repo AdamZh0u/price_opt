@@ -1,0 +1,82 @@
+# build with host mode: -t means tag
+# `docker build --network host -t deego/salepred:1.0 .`
+
+FROM ubuntu:22.04
+
+# https://github.com/suzuki-shm/PyomoContainer/blob/master/Dockerfile
+ENV TOOL_DIR /opt
+# ENV BONMIN_VERSION 1.8.7
+# ENV COUENNE_VERSION 0.5.7
+
+# ENV SCIP_VERSION 6.0.1
+ENV LD_LIBRARY_PATH ${LD_LIBRARY_PATH}:/lib:/usr/lib:/usr/local/lib
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential \
+                                              gfortran \
+                                              file \
+                                              wget \
+                                              unzip \
+                                              zlib1g-dev \
+                                              bison \
+                                              flex \
+                                              libgmp-dev \
+                                              libreadline-dev \
+                                              libncurses5-dev \
+                                              glpk-utils \
+                                              libblas-dev \
+                                              liblapack-dev \
+                                              python3-dev \
+                                              python3-pip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install python packages
+# RUN pip3 install wheel setuptools && \
+#     pip3 install jupyterlab pyomo
+
+# Install IpOPT
+ENV IPOPT_VERSION 3.12.13
+
+WORKDIR ${TOOL_DIR}
+RUN wget https://www.coin-or.org/download/source/Ipopt/Ipopt-${IPOPT_VERSION}.tgz && \
+    tar zxvf Ipopt-${IPOPT_VERSION}.tgz && \
+    rm Ipopt-${IPOPT_VERSION}.tgz && \
+    cd ${TOOL_DIR}/Ipopt-${IPOPT_VERSION}/ThirdParty/ASL && \
+    ./get.ASL && \
+    # cd ${TOOL_DIR}/Ipopt-${IPOPT_VERSION}/ThirdParty/Mumps && \
+    # ./get.Mumps && \
+    # cd ${TOOL_DIR}/Ipopt-${IPOPT_VERSION}/ThirdParty/Metis && \
+    # ./get.Metis && \
+    cd ${TOOL_DIR}/Ipopt-${IPOPT_VERSION} && \
+    mkdir build && \
+    cd ${TOOL_DIR}/Ipopt-${IPOPT_VERSION}/build && \
+    ../configure --build=aarch64-unknown-linux-gnu --prefix=/usr/local --enable-static CXX=g++ CC=gcc F77=gfortran && \
+    make && \
+    # make test && \
+    make install && \
+    cd ${TOOL_DIR} && \
+    rm -rf ${TOOL_DIR}/Ipopt-${IPOPT_VERSION}
+
+
+# 设置工作目录和user
+WORKDIR /workspace
+USER root
+
+# 基本环境
+# RUN apt update && \
+#     apt install git
+RUN apt update && \
+    apt-get install nano
+
+# --- python pakgs ---
+# 复制本地文件到容器中  
+COPY requirements.txt .
+
+# # 安装Python依赖z 
+RUN pip3 install --upgrade pip && \
+    pip3 install --no-cache-dir -r requirements.txt
+
+
+# docker run --network host --name optprice -v "%cd%:/workspace"  -it optprice
+# docker run --network host --name optprice -v $(pwd):/workspace  -it optprice
+# --gpus all
