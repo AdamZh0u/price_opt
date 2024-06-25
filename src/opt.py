@@ -175,9 +175,9 @@ def optimize_endpoint(params: List[ProductParams]):
     try:
         df_params = pd.DataFrame([param.model_dump() for param in params])
         df_params = preprocess_file(df_params)
-        optimized_prices, deal, deal_days = optimize(df_params)
+        optimized_prices, deal = optimize(df_params)
         df_result = result_process(
-            df_params, optimized_prices, deal, deal_days)
+            df_params, optimized_prices, deal)
         response = OptimizeResponse(
             optimized_price = df_result['optimized_price'].tolist(),
             is_deal = df_result['is_deal'].tolist(),
