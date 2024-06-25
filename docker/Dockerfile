@@ -31,3 +31,6 @@ RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 # docker run --network host --name optprice -v $(pwd):/workspace  -it priceopt:latest
+
+RUN pip install amplpy --no-cache-dir # Install amplpy
+RUN python3 -m amplpy.modules install highs coin --no-cache-dir # Install modules

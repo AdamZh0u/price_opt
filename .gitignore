@@ -5,3 +5,6 @@ data/
 *.code-workspace
 
 .DS_Store
+
+Bonmin/
+scipoptsuite-9.1.0/

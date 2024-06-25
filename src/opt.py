@@ -4,7 +4,7 @@ import pyomo.environ as pyo
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import pandas as pd
-
+from amplpy import modules
 from typing import List
 
 app = FastAPI()
@@ -30,10 +30,9 @@ class ProductParams(BaseModel):
 
 class OptimizeResponse(BaseModel):
     optimized_price: List[float]  # 最优价格
-    is_deal: List[int]  # 是否做deal
+    is_deal: List[int]  # deal天数
     month_profit_rmb: List[float]  # 月利润
-    ld: int  # LD天数
-    bd: int  # BD数 一个BD等于7天
+
 
 
 def preprocess_file(df_params):
@@ -59,21 +58,21 @@ def optimize(df_params):
         range(n_product), domain=pyo.NonNegativeReals, bounds=price_bounds_rule)
 
     # 每个产品是否做deal
-    model.deal = pyo.Var(range(n_product), domain=pyo.Binary, bounds=(0, 1))
+    model.deal = pyo.Var(range(n_product), domain=pyo.NonNegativeIntegers, bounds=(0, 10))
 
-    # set product 1 deal to 1
-    model.deal[0].fix(1)
+    # set product 1 deal to 1 
+    model.deal[0].fix(10.0)
 
-    # 整个产品deal的天数
-    model.A = pyo.Set(initialize=['LD', 'BD'])
-    lb = {'LD': 0, 'BD': 0}
-    ub = {'LD': 4, 'BD': 1}
+    # # 整个产品deal的天数
+    # model.A = pyo.Set(initialize=['LD', 'BD'])
+    # lb = {'LD': 0, 'BD': 0}
+    # ub = {'LD': 4, 'BD': 1}
 
-    def fb(model, i):
-        return (lb[i], ub[i])
+    # def fb(model, i):
+    #     return (lb[i], ub[i])
 
-    model.deal_days = pyo.Var(
-        model.A, bounds=fb, domain=pyo.NonNegativeIntegers)
+    # model.deal_days = pyo.Var(
+    #     model.A, bounds=fb, domain=pyo.NonNegativeIntegers)
 
     # 总利润
     def total_profit_rule(model):
@@ -109,31 +108,33 @@ def optimize(df_params):
             product_sales_deal = a_d[i] * model.prices[i] + b_d[i]
 
             # 总利润
-            all_deal_days = model.deal_days['LD'] + model.deal_days['BD']*7
-            total_profit += (30 - all_deal_days * model.deal[i]) * product_profit_rmb * product_sales \
-                + all_deal_days * model.deal[i] * product_profit_rmb_deal * product_sales_deal \
-                - model.deal_days['LD']*150 - \
-                model.deal_days['BD']*300  # deal费用
+            # all_deal_days = model.deal_days['LD'] + model.deal_days['BD']*7
+            # total_profit += (30 - all_deal_days * model.deal[i]) * product_profit_rmb * product_sales \
+            #     + all_deal_days * model.deal[i] * product_profit_rmb_deal * product_sales_deal \
+            #     - model.deal_days['LD']*150 - \
+            #     model.deal_days['BD']*300  # deal费用
+            total_profit += (30 - model.deal[i]) * product_profit_rmb * product_sales \
+                + model.deal[i] * product_profit_rmb_deal * product_sales_deal
 
         return total_profit
 
     model.total_profit = pyo.Objective(
         rule=total_profit_rule, sense=pyo.maximize)
 
-    solver = pyo.SolverFactory('ipopt')
+    solver = pyo.SolverFactory(modules.find('bonmin'), solver_io='nl')
     result = solver.solve(model)
 
     optimized_prices = [np.round(pyo.value(model.prices[i])).astype(
         int) for i in range(n_product)]
     deal = [np.round(pyo.value(model.deal[i])).astype(int)
             for i in range(n_product)]
-    deal_days = [np.round(pyo.value(model.deal_days[i])).astype(int)
-                 for i in model.A]
+    # deal_days = [np.round(pyo.value(model.deal_days[i])).astype(int)
+    #              for i in model.A]
 
-    return optimized_prices, deal, deal_days
+    return optimized_prices, deal
 
 
-def result_process(df_params, optimized_prices, deal, deal_days):
+def result_process(df_params, optimized_prices, deal):
     df_result = df_params.copy()
     df_result['optimized_price'] = optimized_prices
     df_result['expected_sales'] = (
@@ -143,6 +144,7 @@ def result_process(df_params, optimized_prices, deal, deal_days):
     df_result['fba_commission_local'] = df_result['optimized_price']*0.15
     df_result['labor_cost_6_percent'] = df_result['optimized_price']*0.06
     df_result['storage_cost_2_percent'] = df_result['optimized_price']*0.02
+
     # 是否做deal
     df_result['is_deal'] = deal
     df_result['product_income'] = df_result['optimized_price'] * (1 - df_result['damage_rate']) - df_result['latest_amazon_delivery_fee_usd'] - \
@@ -157,9 +159,11 @@ def result_process(df_params, optimized_prices, deal, deal_days):
         df_result['storage_cost_2_percent']
     df_result['product_profit_rmb_deal'] = df_result['product_income_deal'] * df_result['exchange_rate'] - df_result['purchase_cost'] - \
         df_result['shipping_and_tax']
-    df_result['month_profit_rmb'] = (30 - deal_days[0] - deal_days[1]*7) * df_result['product_profit_rmb'] * df_result['expected_sales'] \
-        + deal_days[0] * df_result['product_profit_rmb_deal'] * df_result['expected_sales_deal'] \
-        - deal_days[0]*150 - deal_days[1]*300
+    # df_result['month_profit_rmb'] = (30 - deal_days[0] - deal_days[1]*7) * df_result['product_profit_rmb'] * df_result['expected_sales'] \
+    #     + deal_days[0] * df_result['product_profit_rmb_deal'] * df_result['expected_sales_deal'] \
+    #     - deal_days[0]*150 - deal_days[1]*300
+    df_result['month_profit_rmb'] = (30 - df_result['is_deal']) * df_result['product_profit_rmb'] * df_result['expected_sales'] \
+        + df_result['is_deal'] * df_result['product_profit_rmb_deal'] * df_result['expected_sales_deal']
 
     df_result = df_result.drop(
         columns=['slope', 'intercept', 'deal_slope', 'deal_intercept'])
@@ -178,8 +182,6 @@ def optimize_endpoint(params: List[ProductParams]):
             optimized_price = df_result['optimized_price'].tolist(),
             is_deal = df_result['is_deal'].tolist(),
             month_profit_rmb = df_result['month_profit_rmb'].tolist(),
-            ld = deal_days[0],
-            bd = deal_days[1]
         )
         return response
     except Exception as e:
