@@ -24,7 +24,7 @@ sudo docker run --network host --name optprice -v $(pwd):/workspace  -it priceop
 ## 进入到docker容器后
 cd /workspace
 
-python
+python3
 from amplpy import AMPL, modules
 modules.activate("<license-uuid>")
 ampl = AMPL()
@@ -34,7 +34,6 @@ nohup python3 src/opt.py &
 
 # 退出docker 并测试端口
 cd ~/opt_price
-
 
 curl -X POST "http://127.0.0.1:52565/optimize" -H "Content-Type: application/json" -d @data/demo.json
 ```
