@@ -6,10 +6,16 @@ cd ~/opt_price/docker
 
 sudo docker build --network host -t priceopt:latest .
 
+# 运行容器
+cd ~/opt_price
+
 sudo docker run --network host --name optprice -v $(pwd):/workspace  -it priceopt:latest
 
+# docker exec 
+# sudo docker exec -it optprice /bin/bash
+
 ## 进入到docker容器后
-cd /workspace/opt_price
+cd /workspace
 
 # 运行服务
 nohup python3 src/opt.py &

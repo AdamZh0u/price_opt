@@ -33,7 +33,7 @@ class OptimizeResponse(BaseModel):
     is_deal: List[int]  # 预期销量
     month_profit_rmb: List[float]  # fba 佣金
     ld: int  # LD天数
-    bd: int  # BD天数
+    bd: int  # BD数 一个BD等于7天
 
 
 def preprocess_file(df_params):
