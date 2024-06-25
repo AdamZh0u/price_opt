@@ -30,8 +30,8 @@ class ProductParams(BaseModel):
 
 class OptimizeResponse(BaseModel):
     optimized_price: List[float]  # 最优价格
-    is_deal: List[int]  # 预期销量
-    month_profit_rmb: List[float]  # fba 佣金
+    is_deal: List[int]  # 是否做deal
+    month_profit_rmb: List[float]  # 月利润
     ld: int  # LD天数
     bd: int  # BD数 一个BD等于7天
 
