@@ -30,7 +30,7 @@ class ProductParams(BaseModel):
 
 
 class OptimizeResponse(BaseModel):
-    status: str  # 状态 optimal, infeasible or other
+    status: str  # 状态 
     optimized_price: List[float]  # 最优价格
     is_deal: List[int]  # deal天数
     month_profit_rmb: List[float]  # 月利润
@@ -227,6 +227,9 @@ def optimize_endpoint(params: List[ProductParams]):
         results_d = optimize_with_deal(dft)
         results_nd = optimize_without_deal(dft)
 
+        str_model = f"With deal opt: {results_d[3]}, status: {results_d[0]}\n 
+                Without deal opt: {results_nd[3]}, status: {results_nd[0]}"
+    
         if results_d[3] > results_nd[3]:  # Comparing max_profit
             results = results_d
         else:
@@ -236,7 +239,7 @@ def optimize_endpoint(params: List[ProductParams]):
         df_result = result_process(dft, optimized_prices, deal)
 
         response = OptimizeResponse(
-            status=status,
+            status=str_model,
             optimized_price=df_result['optimized_price'].tolist(),
             is_deal=df_result['is_deal'].tolist(),
             month_profit_rmb=df_result['month_profit_rmb'].tolist(),
