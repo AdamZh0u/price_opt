@@ -30,7 +30,7 @@ class ProductParams(BaseModel):
 
 
 class OptimizeResponse(BaseModel):
-    status: str  # 状态 
+    status: str  #  比较两种方案 结果和状态
     optimized_price: List[float]  # 最优价格
     is_deal: List[int]  # deal天数
     month_profit_rmb: List[float]  # 月利润
