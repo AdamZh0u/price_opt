@@ -6,6 +6,7 @@ from pydantic import BaseModel
 import pandas as pd
 from amplpy import modules
 from typing import List
+from pyomo.opt import SolverStatus, TerminationCondition
 
 app = FastAPI()
 
@@ -29,10 +30,10 @@ class ProductParams(BaseModel):
 
 
 class OptimizeResponse(BaseModel):
+    status: str  # 状态 optimal, infeasible or other
     optimized_price: List[float]  # 最优价格
     is_deal: List[int]  # deal天数
     month_profit_rmb: List[float]  # 月利润
-
 
 
 def preprocess_file(df_params):
@@ -47,7 +48,7 @@ def preprocess_file(df_params):
     return df_params
 
 
-def optimize(df_params):
+def optimize_with_deal(df_params):
     n_product = len(df_params)
     model = pyo.ConcreteModel()
 
@@ -58,21 +59,11 @@ def optimize(df_params):
         range(n_product), domain=pyo.NonNegativeReals, bounds=price_bounds_rule)
 
     # 每个产品是否做deal
-    model.deal = pyo.Var(range(n_product), domain=pyo.NonNegativeIntegers, bounds=(0, 10))
+    model.deal = pyo.Var(
+        range(n_product), domain=pyo.NonNegativeIntegers, bounds=(0, 10))
 
-    # set product 1 deal to 1 
+    # set product 1 deal to 1
     model.deal[0].fix(10.0)
-
-    # # 整个产品deal的天数
-    # model.A = pyo.Set(initialize=['LD', 'BD'])
-    # lb = {'LD': 0, 'BD': 0}
-    # ub = {'LD': 4, 'BD': 1}
-
-    # def fb(model, i):
-    #     return (lb[i], ub[i])
-
-    # model.deal_days = pyo.Var(
-    #     model.A, bounds=fb, domain=pyo.NonNegativeIntegers)
 
     # 总利润
     def total_profit_rule(model):
@@ -107,12 +98,6 @@ def optimize(df_params):
             # deal销量
             product_sales_deal = a_d[i] * model.prices[i] + b_d[i]
 
-            # 总利润
-            # all_deal_days = model.deal_days['LD'] + model.deal_days['BD']*7
-            # total_profit += (30 - all_deal_days * model.deal[i]) * product_profit_rmb * product_sales \
-            #     + all_deal_days * model.deal[i] * product_profit_rmb_deal * product_sales_deal \
-            #     - model.deal_days['LD']*150 - \
-            #     model.deal_days['BD']*300  # deal费用
             total_profit += (30 - model.deal[i]) * product_profit_rmb * product_sales \
                 + model.deal[i] * product_profit_rmb_deal * product_sales_deal
 
@@ -124,14 +109,76 @@ def optimize(df_params):
     solver = pyo.SolverFactory(modules.find('bonmin'), solver_io='nl')
     result = solver.solve(model)
 
-    optimized_prices = [np.round(pyo.value(model.prices[i])).astype(
-        int) for i in range(n_product)]
+    if (result.solver.status == SolverStatus.ok) and (result.solver.termination_condition == TerminationCondition.optimal):
+        status = 'optimal'
+    elif result.solver.termination_condition == TerminationCondition.infeasible:
+        status = 'infeasible'
+    else:
+        status = result.solver.status
+
+    optimized_prices = [np.round(pyo.value(model.prices[i]), 2)
+                        for i in range(n_product)]
     deal = [np.round(pyo.value(model.deal[i])).astype(int)
             for i in range(n_product)]
-    # deal_days = [np.round(pyo.value(model.deal_days[i])).astype(int)
-    #              for i in model.A]
+    max_profit = np.round(pyo.value(model.total_profit), 2)
 
-    return optimized_prices, deal
+    return status, optimized_prices, deal, max_profit
+
+
+def optimize_without_deal(df_params):
+    n_product = len(df_params)
+    model = pyo.ConcreteModel()
+
+    def price_bounds_rule(model, i):
+        return df_params.loc[i, 'price_lower_bound'], df_params.loc[i, 'price_upper_bound']
+
+    model.prices = pyo.Var(
+        range(n_product), domain=pyo.NonNegativeReals, bounds=price_bounds_rule)
+
+    # 总利润
+    def total_profit_rule(model):
+        a = df_params['slope']
+        b = df_params['intercept']
+        total_profit = 0
+        for i in range(n_product):
+            # 日常每天利润
+            fba_commission = model.prices[i] * 0.15
+            manual_fee = model.prices[i] * 0.06
+            storage_fee = model.prices[i] * 0.02
+
+            # 每个产品的利润 日常
+            product_income = model.prices[i] * (1 - df_params['damage_rate'][i]) - df_params['latest_amazon_delivery_fee_usd'][i] - \
+                fba_commission - df_params['vat_local'][i] - df_params['promotion_discount'][i] - \
+                df_params['ppc_cost'][i] - manual_fee - storage_fee
+            product_profit_rmb = product_income * df_params['exchange_rate'][i] - df_params['purchase_cost'][i] - \
+                df_params['shipping_and_tax'][i]
+
+            # 日常销量
+            product_sales = a[i] * model.prices[i] + b[i]
+
+            total_profit += 30 * product_profit_rmb * product_sales
+
+        return total_profit
+
+    model.total_profit = pyo.Objective(
+        rule=total_profit_rule, sense=pyo.maximize)
+
+    solver = pyo.SolverFactory(modules.find('bonmin'), solver_io='nl')
+    result = solver.solve(model)
+
+    if (result.solver.status == SolverStatus.ok) and (result.solver.termination_condition == TerminationCondition.optimal):
+        status = 'optimal'
+    elif result.solver.termination_condition == TerminationCondition.infeasible:
+        status = 'infeasible'
+    else:
+        status = result.solver.status
+
+    optimized_prices = [np.round(pyo.value(model.prices[i]), 2)
+                        for i in range(n_product)]
+    deal = [0 for i in range(n_product)]
+    max_profit = np.round(pyo.value(model.total_profit), 2)
+
+    return status, optimized_prices, deal, max_profit
 
 
 def result_process(df_params, optimized_prices, deal):
@@ -163,7 +210,8 @@ def result_process(df_params, optimized_prices, deal):
     #     + deal_days[0] * df_result['product_profit_rmb_deal'] * df_result['expected_sales_deal'] \
     #     - deal_days[0]*150 - deal_days[1]*300
     df_result['month_profit_rmb'] = (30 - df_result['is_deal']) * df_result['product_profit_rmb'] * df_result['expected_sales'] \
-        + df_result['is_deal'] * df_result['product_profit_rmb_deal'] * df_result['expected_sales_deal']
+        + df_result['is_deal'] * df_result['product_profit_rmb_deal'] * \
+        df_result['expected_sales_deal']
 
     df_result = df_result.drop(
         columns=['slope', 'intercept', 'deal_slope', 'deal_intercept'])
@@ -174,14 +222,24 @@ def result_process(df_params, optimized_prices, deal):
 def optimize_endpoint(params: List[ProductParams]):
     try:
         df_params = pd.DataFrame([param.model_dump() for param in params])
-        df_params = preprocess_file(df_params)
-        optimized_prices, deal = optimize(df_params)
-        df_result = result_process(
-            df_params, optimized_prices, deal)
+
+        dft = preprocess_file(df_params)
+        results_d = optimize_with_deal(dft)
+        results_nd = optimize_without_deal(dft)
+
+        if results_d[3] > results_nd[3]:  # Comparing max_profit
+            results = results_d
+        else:
+            results = results_nd
+
+        status, optimized_prices, deal, max_profit = results
+        df_result = result_process(dft, optimized_prices, deal)
+
         response = OptimizeResponse(
-            optimized_price = df_result['optimized_price'].tolist(),
-            is_deal = df_result['is_deal'].tolist(),
-            month_profit_rmb = df_result['month_profit_rmb'].tolist(),
+            status=status,
+            optimized_price=df_result['optimized_price'].tolist(),
+            is_deal=df_result['is_deal'].tolist(),
+            month_profit_rmb=df_result['month_profit_rmb'].tolist(),
         )
         return response
     except Exception as e:
