@@ -6,7 +6,6 @@ cd ~/opt_price/docker
 
 sudo docker build --network host -t priceopt:latest .
 
-
 # 运行容器
 cd ~/opt_price
 

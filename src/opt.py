@@ -242,7 +242,7 @@ def optimize_endpoint(params: List[ProductParams]):
             status=str_model,
             optimized_price=df_result['optimized_price'].tolist(),
             is_deal=df_result['is_deal'].tolist(),
-            month_profit_rmb=df_result['month_profit_rmb'].tolist(),
+            month_profit_rmb=df_result['month_profit_rmb'].round(2).tolist(),
         )
         return response
     except Exception as e:
