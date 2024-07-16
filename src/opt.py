@@ -227,8 +227,7 @@ def optimize_endpoint(params: List[ProductParams]):
         results_d = optimize_with_deal(dft)
         results_nd = optimize_without_deal(dft)
 
-        str_model = f"With deal opt: {results_d[3]}, status: {results_d[0]}\n 
-                Without deal opt: {results_nd[3]}, status: {results_nd[0]}"
+        str_model = f"With deal opt: {results_d[3]}, status: {results_d[0]}\n Without deal opt: {results_nd[3]}, status: {results_nd[0]}"
     
         if results_d[3] > results_nd[3]:  # Comparing max_profit
             results = results_d

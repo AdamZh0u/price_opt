@@ -6,6 +6,7 @@ cd ~/opt_price/docker
 
 sudo docker build --network host -t priceopt:latest .
 
+
 # 运行容器
 cd ~/opt_price
 
@@ -31,7 +32,7 @@ ampl = AMPL()
 # 运行服务
 nohup python3 src/opt.py &
 
-# 退出docker 并测试端口
+# 退出docker 并测试端口 control+d 退出
 cd ~/opt_price
 
 curl -X POST "http://127.0.0.1:52565/optimize" -H "Content-Type: application/json" -d @data/demo.json
