@@ -10,3 +10,5 @@ Bonmin/
 scipoptsuite-9.1.0/
 
 test
+
+notebooks/02_port_test.ipynb
